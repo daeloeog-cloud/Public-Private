@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>바카라 분석기 v17.0 Unified — 완전구동</title>
+<style>
+:root{--bg:#000;--panel:#071018;--muted:#9aa7b2;--text:#e6f0f6;
+--player:#007bff;--banker:#d93025;--tie:#2ecc40}
+html,body{height:100%;margin:0;background:var(--bg);color:var(--text);font-family:-apple-system,Roboto,Arial,system-ui}
+.wrap{max-width:960px;margin:10px auto;padding:12px}
+.app{background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(255,255,255,0.01));border-radius:12px;padding:12px;border:1px solid rgba(255,255,255,0.04)}
+h1{margin:0;font-size:18px}
+.small{color:var(--muted);font-size:13px}
+.panel{background:var(--panel);border-radius:10px;padding:10px;margin-top:10px;border:1px solid rgba(255,255,255,0.03)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px}
+.btn{flex:1;padding:14px;border-radius:12px;border:0;font-weight:800;font-size:18px;cursor:pointer;color:#fff;transition:all 0.18s}
+.btn-p{background:linear-gradient(180deg,var(--player),#004dc6)}
+.btn-b{background:linear-gradient(180deg,var(--banker),#a8231b)}
+.btn-t{background:linear-gradient(180deg,var(--tie),#169f2b)}
+.control-btn{flex:1;padding:10px;border-radius:10px;border:0;font-weight:700;font-size:15px;background:#222;color:#fff}
+#highlightFinal{margin-top:10px;font-size:20px;font-weight:900;text-align:center;transition:color .25s}
+#confidenceBar{width:100%;height:12px;background:#111;border-radius:8px;margin-top:6px;overflow:hidden;border:1px solid rgba(255,255,255,0.03)}
+#confidenceFill{height:100%;width:0;background:#0fd;border-radius:8px;transition:width .5s,background .3s}
+.historyBox{background:#081016;padding:8px;border-radius:8px;margin-top:8px;min-height:36px}
+.token{display:inline-block;padding:6px 8px;border-radius:8px;margin-right:6px;font-weight:800;color:#000}
+.kv{font-size:13px;color:var(--muted)}
+.small-btn{padding:8px 10px;border-radius:8px;border:0;background:#1a2226;color:#fff;font-weight:700;cursor:pointer}
+canvas{width:100%;height:160px;display:block;margin-top:8px}
+.footer{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}
+.confirm-note{font-size:13px;color:var(--muted);margin-top:6px}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="app">
+    <h1>바카라 분석기 v17.0 Unified</h1>
+    <div class="small">초기화 완전구동 + 입력 결과 패널 포함 (최대 30개)</div>
+
+    <div class="panel">
+      <h3>입력</h3>
+      <div class="row">
+        <button id="btnP" class="btn btn-p">PLAYER (P)</button>
+        <button id="btnB" class="btn btn-b">BANKER (B)</button>
+        <button id="btnT" class="btn btn-t">TIE (T)</button>
+      </div>
+      <div class="row" style="margin-top:8px">
+        <button id="undo" class="control-btn">되돌리기</button>
+        <button id="clear" class="control-btn" style="background:#6b1f1f">초기화 (완전)</button>
+      </div>
+      <div id="resetNote" class="confirm-note"></div>
+      <div id="highlightFinal">📊 복합 예측: —</div>
+      <div id="confidenceBar"><div id="confidenceFill"></div></div>
+
+      <div class="historyBox" id="historyBox" aria-live="polite" style="margin-top:10px">
+        <div class="kv">결과 기록:</div>
+        <div id="historyTokens" style="margin-top:6px"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>예측 확률 상세 (독립 분석)</h3>
+      <div class="value" id="knnProb">기본패턴(KNN): —</div>
+      <div class="value" id="markovProb">Markov: —</div>
+      <div class="value" id="trendProb">Trend: —</div>
+      <div class="value" id="streakProb">Streak: —</div>
+    </div>
+
+    <div class="panel">
+      <h3>복합 예측 확률 변화 그래프</h3>
+      <canvas id="chart"></canvas>
+    </div>
+
+    <div class="panel">
+      <h3>💰 마틴 계산기</h3>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <div class="kv">기본 배팅: <input id="baseBet" type="number" value="1000" style="width:120px"></div>
+        <div class="kv">최대 단계: <input id="maxStep" type="number" value="7" style="width:80px"></div>
+      </div>
+      <div id="martinInfo" class="kv" style="margin-top:8px">현재 단계: 1 / 다음 베팅: 1000원</div>
+      <div class="row" style="margin-top:8px">
+        <button id="martinWin" class="small-btn" style="background:#0a602d">승리 (초기화)</button>
+        <button id="martinLose" class="small-btn" style="background:#6b1f1f">패배 (다음 단계)</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="kv">설정</div>
+      <div style="margin-top:6px" class="kv">저장: 브라우저 로컬</div>
+    </div>
+
+    <div class="footer">v17.0 Unified — 완전구동 HTML / by GPT-5</div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+(function(){
+const MAX_TOKENS=30;
+const STATE_KEY='bp_v17_state';
+const HIST_KEY='bp_v17_history';
+const $=id=>document.getElementById(id);
+
+let state=[]; // recent display (max 30)
+let history=[]; // full history (kept longer)
+let chart, chartData={labels:[],P:[],B:[],T:[]};
+let martinStep=1;
+
+// --- persistence ---
+function saveAll(){localStorage.setItem(STATE_KEY,JSON.stringify(state));localStorage.setItem(HIST_KEY,JSON.stringify(history));}
+function loadAll(){state=JSON.parse(localStorage.getItem(STATE_KEY)||'[]');history=JSON.parse(localStorage.getItem(HIST_KEY)||'[]');}
+
+// --- probability modules ---
+function normalize(o){const s=(o.P||0)+(o.B||0)+(o.T||0);if(!s)return{P:1/3,B:1/3,T:1/3};return{P:o.P/s,B:o.B/s,T:o.T/s};}
+function pattern(){const c={P:0,B:0,T:0};state.forEach(x=>c[x]++);return normalize(c);}
+function markov(){const n=history.length;if(n<1)return{P:1/3,B:1/3,T:1/3};const trans={P:{P:0,B:0,T:0},B:{P:0,B:0,T:0},T:{P:0,B:0,T:0}};for(let i=0;i<n-1;i++)trans[history[i]][history[i+1]]++;const last=history[n-1];return normalize(trans[last]);}
+function trend(){if(history.length<3)return{P:1/3,B:1/3,T:1/3};const recent=history.slice(-10);const c={P:0,B:0,T:0};recent.forEach(x=>c[x]++);return normalize(c);}
+function streak(){if(history.length===0)return{P:1/3,B:1/3,T:1/3};let last=history[history.length-1],s=1;for(let i=history.length-2;i>=0;i--){if(history[i]===last)s++;else break;}const w=0.5*(1-Math.exp(-s/3)),o=(1-w)/2;const r={P:o,B:o,T:o};r[last]=w;return normalize(r);}
+function combine(p,m,t,s){return normalize({P:p.P*0.4+m.P*0.3+t.P*0.15+s.P*0.15,B:p.B*0.4+m.B*0.3+t.B*0.15+s.B*0.15,T:p.T*0.4+m.T*0.3+t.T*0.15+s.T*0.15});}
+
+// --- render / UI updates ---
+function renderHistoryTokens(){
+  const container=$('historyTokens');
+  container.innerHTML='';
+  state.forEach(v=>{
+    const span=document.createElement('span');
+    span.className='token';
+    span.textContent=v;
+    span.style.background = v==='P'? 'var(--player)' : (v==='B'? 'var(--banker)' : 'var(--tie)');
+    container.appendChild(span);
+  });
+  if(state.length===0) container.innerHTML='<span class="kv">기록 없음</span>';
+}
+function displayIndiv(p,m,t,s){
+  $('knnProb').textContent = `기본패턴(KNN): P ${(p.P*100).toFixed(1)}% / B ${(p.B*100).toFixed(1)}% / T ${(p.T*100).toFixed(1)}%`;
+  $('markovProb').textContent = `Markov: P ${(m.P*100).toFixed(1)}% / B ${(m.B*100).toFixed(1)}% / T ${(m.T*100).toFixed(1)}%`;
+  $('trendProb').textContent = `Trend: P ${(t.P*100).toFixed(1)}% / B ${(t.B*100).toFixed(1)}% / T ${(t.T*100).toFixed(1)}%`;
+  $('streakProb').textContent = `Streak: P ${(s.P*100).toFixed(1)}% / B ${(s.B*100).toFixed(1)}% / T ${(s.T*100).toFixed(1)}%`;
+}
+function updateFinal(f){
+  const top=Object.entries(f).sort((a,b)=>b[1]-a[1])[0];
+  const color=top[0]==='P'?'#007bff':(top[0]==='B'?'#d93025':'#2ecc40');
+  $('highlightFinal').style.color=color;
+  $('highlightFinal').textContent = `📊 복합 예측: ${top[0]} ${(top[1]*100).toFixed(1)}%`;
+  const conf = Math.max(f.P,f.B,f.T);
+  $('confidenceFill').style.width = (conf*100) + '%';
+  $('confidenceFill').style.background = color;
+}
+
+// --- chart ---
+function initChart(){
+  const ctx = document.getElementById('chart').getContext('2d');
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: chartData.labels, datasets: [
+      { label:'P', data: chartData.P, borderColor:'#007bff', tension:0.3, pointRadius:1 },
+      { label:'B', data: chartData.B, borderColor:'#d93025', tension:0.3, pointRadius:1 },
+      { label:'T', data: chartData.T, borderColor:'#2ecc40', tension:0.3, pointRadius:1 }
+    ]},
+    options: { scales:{ y:{ min:0, max:100, ticks:{ color:'#ccc' } }, x:{ ticks:{ color:'#ccc' } } }, plugins:{ legend:{ labels:{ color:'#ccc' } } }, animation:false }
+  });
+}
+function pushChart(f){
+  chartData.labels.push(''); chartData.P.push(f.P*100); chartData.B.push(f.B*100); chartData.T.push(f.T*100);
+  if(chartData.labels.length>50){ chartData.labels.shift(); chartData.P.shift(); chartData.B.shift(); chartData.T.shift(); }
+  chart.update();
+}
+function clearChartAll(){
+  chartData = {labels:[],P:[],B:[],T:[]};
+  if(chart) chart.update();
+}
+
+// --- core actions ---
+function addResult(r){
+  if(!['P','B','T'].includes(r)) return;
+  // push to full history and to recent state tokens
+  history.push(r);
+  state.push(r);
+  if(state.length>MAX_TOKENS) state = state.slice(-MAX_TOKENS);
+  saveAll();
+  refreshAll();
+  // small vibration if supported
+  if(navigator.vibrate) navigator.vibrate(20);
+}
+
+function undo(){
+  // remove last from both state and history (if present)
+  if(history.length>0) history.pop();
+  if(state.length>0) state.pop();
+  saveAll();
+  refreshAll();
+  if(navigator.vibrate) navigator.vibrate([10,20]);
+}
+
+function completeReset(){ // full reset WITHOUT reload
+  state = []; history = []; saveAll(); clearChartAll(); martinReset(); refreshAll();
+  $('resetNote').textContent = '완전 초기화가 실행되었습니다.';
+  setTimeout(()=>{$('resetNote').textContent='';},2000);
+  if(navigator.vibrate) navigator.vibrate([30,10,30]);
+  // ensure UI cleared
+  renderEmptyStats();
+}
+
+function renderEmptyStats(){
+  $('knnProb').textContent = '기본패턴(KNN): —';
+  $('markovProb').textContent = 'Markov: —';
+  $('trendProb').textContent = 'Trend: —';
+  $('streakProb').textContent = 'Streak: —';
+  $('highlightFinal').textContent = '📊 복합 예측: —';
+  $('confidenceFill').style.width='0%';
+  renderHistoryTokens();
+}
+
+// recompute and render everything
+function refreshAll(){
+  renderHistoryTokens();
+  const p = pattern();
+  const m = markov();
+  const t = trend();
+  const s = streak();
+  displayIndiv(p,m,t,s);
+  const f = combine(p,m,t,s);
+  updateFinal(f);
+  pushChart(f);
+  updateMartinInfo();
+}
+
+// --- Martin ---
+function martinCalc(){
+  const base = parseFloat($('baseBet').value) || 0;
+  const max = parseInt($('maxStep').value) || 1;
+  const cur = Math.min(martinStep, max);
+  const bet = Math.round(base * Math.pow(2, cur-1));
+  const loss = Math.round(base * (Math.pow(2, cur-1) - 1));
+  $('martinInfo').textContent = `현재 단계: ${cur} / 다음 베팅: ${bet.toLocaleString()}원 (누적손실: ${loss.toLocaleString()}원)`;
+}
+function martinReset(){ martinStep=1; martinCalc(); saveAll(); }
+function martinLose(){ martinStep++; martinCalc(); saveAll(); if(martinStep > parseInt($('maxStep').value || '1')) { alert('최대 단계를 초과했습니다. 마틴을 리셋하세요.'); } }
+function martinWin(){ martinReset(); alert('승리: 마틴 단계가 초기화되었습니다.'); }
+function updateMartinInfo(){ martinCalc(); }
+
+// safety: load saved if any
+function initialLoad(){ loadAll(); if(state.length>0 || history.length>0){ refreshAll(); } else { renderEmptyStats(); } }
+
+// wire up UI
+window.addEventListener('DOMContentLoaded',()=>{
+  initChart();
+  initialLoad();
+  // inputs
+  $('btnP').addEventListener('click',()=>addResult('P'));
+  $('btnB').addEventListener('click',()=>addResult('B'));
+  $('btnT').addEventListener('click',()=>addResult('T'));
+  $('undo').addEventListener('click',()=>undo());
+  $('clear').addEventListener('click',()=>{ if(confirm('완전 초기화: 그래프, 기록, 마틴 등 모든 데이터를 삭제합니다. 진행할까요?')) completeReset(); });
+  $('martinLose').addEventListener('click',()=>{ martinLose(); });
+  $('martinWin').addEventListener('click',()=>{ martinWin(); });
+  $('baseBet').addEventListener('change',()=>{ martinCalc(); saveAll(); });
+  $('maxStep').addEventListener('change',()=>{ martinCalc(); saveAll(); });
+});
+})();
+</script>
+</body>
+</html>
